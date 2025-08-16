@@ -13,4 +13,8 @@ public class HelloWorldController {
     public  String bye() {
         return "Bye ";
     }
+    @GetMapping("/uday")
+    public String uday(){
+        return "Uday is Erripuku";
+    }
 }
