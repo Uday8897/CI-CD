@@ -65,19 +65,17 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          path: gitops
           token: ${{ secrets.GITHUB_TOKEN }}   # ✅ Auto token, no PAT needed
 
       - name: Update deployment image
         run: |
           cd gitops/k8s
-          sed -i "s|image: .*/springboot-app:.*|image: ${{ secrets.DOCKER_USERNAME }}/springboot-app:${{ env.IMAGE_TAG }}|g" deploy.yml
+          sed -i "s|image: .*/springboot-app:.*|image: ${{ secrets.DOCKER_USERNAME }}/springboot-app:${{ env.IMAGE_TAG }}|g" deploy.yaml
 
       - name: Commit and push changes
         run: |
-          cd gitops
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add k8s/deploy.yml
+          git add gitops/k8s/deploy.yaml
           git commit -m "Update image to ${{ secrets.DOCKER_USERNAME }}/springboot-app:${{ env.IMAGE_TAG }}" || echo "No changes to commit"
           git push
