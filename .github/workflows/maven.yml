@@ -65,12 +65,11 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}   # ✅ Auto token, no PAT needed
+          token: ${{ secrets.GITHUB_TOKEN }}   # ✅ No PAT needed
 
       - name: Update deployment image
         run: |
-          cd gitops/k8s
-          sed -i "s|image: .*/springboot-app:.*|image: ${{ secrets.DOCKER_USERNAME }}/springboot-app:${{ env.IMAGE_TAG }}|g" deploy.yaml
+          sed -i "s|image: .*/springboot-app.*|image: ${{ secrets.DOCKER_USERNAME }}/springboot-app:${{ env.IMAGE_TAG }}|g" gitops/k8s/deploy.yaml
 
       - name: Commit and push changes
         run: |
