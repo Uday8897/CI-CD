@@ -11,7 +11,7 @@ jobs:
   build-test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source code
+      - name: Checkout sourcecode
         uses: actions/checkout@v4
 
       - name: Setup JDK 21
