@@ -1,4 +1,4 @@
-name: Auto Assign Issue
+name: Dynamic Round Robin Issue Assignment
 
 on:
   issues:
@@ -6,66 +6,56 @@ on:
 
 permissions:
   issues: write
-  contents: read
+  contents: write
 
 jobs:
-  assign_dynamic:
+  assign:
     runs-on: ubuntu-latest
     steps:
-      - name: Assign a collaborator (dynamic)
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Assign issue dynamically
         uses: actions/github-script@v7
         with:
           script: |
-            // 1) fetch collaborators for the repo
-            const per_page = 100;
-            let page = 1;
-            let all = [];
+            const fs = require("fs");
 
-            while (true) {
-              const res = await github.rest.repos.listCollaborators({
+            // Read round-robin state file
+            const statePath = ".github/rr_state.json";
+            const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
+            let lastIndex = state.last;
+
+            // Fetch collaborators dynamically
+            const collaborators = await github.paginate(
+              github.rest.repos.listCollaborators,
+              {
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                per_page,
-                page
-              });
+                per_page: 100
+              }
+            );
 
-              if (!res || !res.data) break;
-              all = all.concat(res.data);
-              if (res.data.length < per_page) break;
-              page++;
-            }
+            // Filter users who have push or admin permission
+            const team = collaborators
+              .filter(c => c.permissions && c.permissions.push)
+              .map(c => c.login);
 
-            core.info(`Found ${all.length} collaborators in repo.`);
-
-            // 2) filter eligible collaborators:
-            // - only users (not bots)
-            // - must have push permission (can be assigned)
-            const eligible = all.filter(c => {
-              // c.permissions is typically present and has push/admin/pull booleans
-              const hasPush = c.permissions && c.permissions.push;
-              const isUser = c.type === 'User' || !c.type; // sometimes type omitted
-              // Avoid the repository owner or actions bot if you want — up to you
-              return isUser && hasPush;
-            });
-
-            core.info(`Eligible collaborators (push access): ${eligible.map(e => e.login).join(', ')}`);
-
-            if (eligible.length === 0) {
-              // optional: add a comment to the issue or add a label to notify humans
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: "⚠️ No eligible collaborators with push access were found to assign this issue. Please check repository collaborators or accept pending invites."
-              });
+            if (team.length === 0) {
+              core.setFailed("No collaborators with push access found.");
               return;
             }
 
-            // 3) pick one collaborator (random)
-            const selected = eligible[Math.floor(Math.random() * eligible.length)].login;
-            core.info(`Selected assignee: ${selected}`);
+            core.info("Collaborators found: " + team.join(", "));
 
-            // 4) Add assignee
+            // Round robin: pick next
+            let nextIndex = (lastIndex + 1) % team.length;
+            let selected = team[nextIndex];
+
+            core.info(`Assigning issue to: ${selected}`);
+
             await github.rest.issues.addAssignees({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -73,4 +63,14 @@ jobs:
               assignees: [selected]
             });
 
-            core.info(`Assigned issue #${context.issue.number} to ${selected}`);
+            // Update state
+            state.last = nextIndex;
+            fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+      - name: Commit updated state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/rr_state.json
+          git commit -m "Update round robin state" || echo "No changes"
+          git push
