@@ -6,22 +6,71 @@ on:
 
 permissions:
   issues: write
+  contents: read
 
 jobs:
-  assign_random:
+  assign_dynamic:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/github-script@v7
+      - name: Assign a collaborator (dynamic)
+        uses: actions/github-script@v7
         with:
           script: |
-            const collaborators = ["ajaykumar11234", "rakeshpolagoni", "Uday8897"];
+            // 1) fetch collaborators for the repo
+            const per_page = 100;
+            let page = 1;
+            let all = [];
 
-            // Pick one
-            const selected = collaborators[Math.floor(Math.random() * collaborators.length)];
+            while (true) {
+              const res = await github.rest.repos.listCollaborators({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                per_page,
+                page
+              });
 
+              if (!res || !res.data) break;
+              all = all.concat(res.data);
+              if (res.data.length < per_page) break;
+              page++;
+            }
+
+            core.info(`Found ${all.length} collaborators in repo.`);
+
+            // 2) filter eligible collaborators:
+            // - only users (not bots)
+            // - must have push permission (can be assigned)
+            const eligible = all.filter(c => {
+              // c.permissions is typically present and has push/admin/pull booleans
+              const hasPush = c.permissions && c.permissions.push;
+              const isUser = c.type === 'User' || !c.type; // sometimes type omitted
+              // Avoid the repository owner or actions bot if you want — up to you
+              return isUser && hasPush;
+            });
+
+            core.info(`Eligible collaborators (push access): ${eligible.map(e => e.login).join(', ')}`);
+
+            if (eligible.length === 0) {
+              // optional: add a comment to the issue or add a label to notify humans
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: "⚠️ No eligible collaborators with push access were found to assign this issue. Please check repository collaborators or accept pending invites."
+              });
+              return;
+            }
+
+            // 3) pick one collaborator (random)
+            const selected = eligible[Math.floor(Math.random() * eligible.length)].login;
+            core.info(`Selected assignee: ${selected}`);
+
+            // 4) Add assignee
             await github.rest.issues.addAssignees({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
               assignees: [selected]
             });
+
+            core.info(`Assigned issue #${context.issue.number} to ${selected}`);
