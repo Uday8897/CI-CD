@@ -8,7 +8,29 @@ permissions:
   contents: write
 
 jobs:
+  fix-code:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Replace erroneous SpringApplication call
+        run: |
+          sed -i 's/SpringApplication\.ru/SpringApplication.run/g' src/main/java/com/ci_cd/CiCdApplication.java
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add src/main/java/com/ci_cd/CiCdApplication.java
+          git commit -m "ci: fix SpringApplication call" || echo "No changes to commit"
+          git push
+
   build-test:
+    needs: fix-code
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source code
