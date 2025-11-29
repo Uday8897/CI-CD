@@ -1,81 +1,81 @@
-name: Dynamic Round Robin Assignment
+# name: Dynamic Round Robin Assignment
 
-on:
-  issues:
-    types: [opened]
+# on:
+#   issues:
+#     types: [opened]
 
-permissions:
-  issues: write
-  contents: write
+# permissions:
+#   issues: write
+#   contents: write
 
-jobs:
-  assign:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: true
+# jobs:
+#   assign:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout repo
+#         uses: actions/checkout@v4
+#         with:
+#           persist-credentials: true
 
-      - name: Round Robin Assign
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require("fs");
-            const statePath = ".github/rr_state.json";
+#       - name: Round Robin Assign
+#         uses: actions/github-script@v7
+#         with:
+#           script: |
+#             const fs = require("fs");
+#             const statePath = ".github/rr_state.json";
 
-            // --- 1. ENSURE STATE FILE EXISTS ---
-            if (!fs.existsSync(statePath)) {
-              core.info("State file not found. Creating new rr_state.json");
-              fs.writeFileSync(statePath, JSON.stringify({ last: -1 }, null, 2));
-            }
+#             // --- 1. ENSURE STATE FILE EXISTS ---
+#             if (!fs.existsSync(statePath)) {
+#               core.info("State file not found. Creating new rr_state.json");
+#               fs.writeFileSync(statePath, JSON.stringify({ last: -1 }, null, 2));
+#             }
 
-            const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
-            let lastIndex = state.last;
+#             const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
+#             let lastIndex = state.last;
 
-            // --- 2. FETCH COLLABORATORS DYNAMICALLY ---
-            const collaborators = await github.paginate(
-              github.rest.repos.listCollaborators,
-              {
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                per_page: 100
-              }
-            );
+#             // --- 2. FETCH COLLABORATORS DYNAMICALLY ---
+#             const collaborators = await github.paginate(
+#               github.rest.repos.listCollaborators,
+#               {
+#                 owner: context.repo.owner,
+#                 repo: context.repo.repo,
+#                 per_page: 100
+#               }
+#             );
 
-            // Only users with push/admin rights
-            const team = collaborators
-              .filter(c => c.permissions?.push)
-              .map(c => c.login);
+#             // Only users with push/admin rights
+#             const team = collaborators
+#               .filter(c => c.permissions?.push)
+#               .map(c => c.login);
 
-            core.info("Eligible collaborators: " + team.join(", "));
+#             core.info("Eligible collaborators: " + team.join(", "));
 
-            if (team.length === 0) {
-              core.setFailed("No collaborators with push access found.");
-              return;
-            }
+#             if (team.length === 0) {
+#               core.setFailed("No collaborators with push access found.");
+#               return;
+#             }
 
-            // --- 3. ROUND ROBIN LOGIC ---
-            let nextIndex = (lastIndex + 1) % team.length;
-            let selected = team[nextIndex];
+#             // --- 3. ROUND ROBIN LOGIC ---
+#             let nextIndex = (lastIndex + 1) % team.length;
+#             let selected = team[nextIndex];
 
-            core.info(`Assigning issue to: ${selected}`);
+#             core.info(`Assigning issue to: ${selected}`);
 
-            await github.rest.issues.addAssignees({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              assignees: [selected]
-            });
+#             await github.rest.issues.addAssignees({
+#               owner: context.repo.owner,
+#               repo: context.repo.repo,
+#               issue_number: context.issue.number,
+#               assignees: [selected]
+#             });
 
-            // --- 4. UPDATE STATE ---
-            state.last = nextIndex;
-            fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+#             // --- 4. UPDATE STATE ---
+#             state.last = nextIndex;
+#             fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
-      - name: Commit updated state file
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .github/rr_state.json
-          git commit -m "Update round robin state" || echo "No changes"
-          git push
+#       - name: Commit updated state file
+#         run: |
+#           git config user.name "github-actions[bot]"
+#           git config user.email "github-actions[bot]@users.noreply.github.com"
+#           git add .github/rr_state.json
+#           git commit -m "Update round robin state" || echo "No changes"
+#           git push
