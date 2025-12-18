@@ -51,6 +51,9 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Make mvnw executable
+        run: chmod +x mvnw
+
       - name: Set IMAGE_TAG
         id: set_tag
         run: |
